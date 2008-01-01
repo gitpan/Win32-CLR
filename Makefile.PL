@@ -33,7 +33,7 @@ if ($error) {
 my $inc = '';
 
 if ($ENV{INCLUDE}) {
-    for my $inc_dir ( split /[:;]/, $ENV{INCLUDE} ) {
+    for my $inc_dir ( split /;/, $ENV{INCLUDE} ) {
         next if $inc_dir eq '%INCLUDE%';
         $inc .= qq( "-I$inc_dir" );
     }

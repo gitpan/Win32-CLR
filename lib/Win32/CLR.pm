@@ -4,7 +4,7 @@ use strict;
 use Carp;
 
 BEGIN {
-    our $VERSION = "0.01";
+    our $VERSION = "0.02";
     require XSLoader;
     XSLoader::load(__PACKAGE__, $VERSION);
 
@@ -13,7 +13,9 @@ BEGIN {
         get_property    set_property
         get_value       set_value
         add_event       remove_event
-        has_member
+        has_member      create_instance
+        create_delegate create_enum
+        create_array
     );
 
     foreach my $method (@methods) {
@@ -21,22 +23,8 @@ BEGIN {
         my $call = "_" . $method;
         *{$method} = sub {
             my $self = shift;
-            return ref($self) ? $self->$call( $self->get_qualified_type(), @_ ) : $self->$call(@_);
-        };
-    }
-
-    @methods = qw(
-        create_instance create_delegate
-        create_enum     create_array
-        derived_from
-    );
-
-    foreach my $method (@methods) {
-        no strict "refs";
-        my $call = "_" . $method;
-        *{$method} = sub {
-            my ($self, $type, @params) = @_;
-            return $self->$call( $self->parse_type($type), @params );
+            my $type = ref($self) ? $self->get_qualified_type() : $self->parse_type( shift(@_) );
+            return $self->$call($type, @_);
         };
     }
 
@@ -72,25 +60,21 @@ sub parse_method {
 
 sub call_method {
     my $self = shift;
-    my ($type, $method, @params);
+    my $type = ref($self) ? $self->get_qualified_type() : $self->parse_type( shift(@_) );
+    my ($method, @generic) = $self->parse_method( shift(@_) );
 
-    if (ref $self) {
-        $type = $self->get_qualified_type();
+    if (@generic) {
+        return $self->_call_generic_method($type, $method, \@generic, @_);
     }
     else {
-        $type = shift;
-        $type = $self->parse_type($type);
+        return $self->_call_method($type, $method, @_);
     }
 
-    ($method, @params) = @_;
-    my ($method_name, @generic_params) = $self->parse_method($method);
+}
 
-    if (@generic_params) {
-        return $self->_call_generic_method($type, $method_name, \@generic_params, @params);
-    }
-    else {
-        return $self->_call_method($type, $method_name, @params);
-    }
+sub derived_from {
+    my ($self, $type) = @_;
+    return $self->_derived_from( $self->parse_type($type) );
 }
 
 sub AUTOLOAD {
@@ -549,7 +533,7 @@ Creates System.Delegate from perl subroutine.
 $CODE can contain "sub_name" or \&sub_ref.
 TYPE is delegate type (ex. System.EventHandler).
 
-    my $deleg = CLR->create_delegate(
+    my $deleg = Win32::CLR->create_delegate(
         "System.EventHandler",
         sub {
             my ($obj, $event_args) = @_;
@@ -614,7 +598,7 @@ Win32::CLR instance has similar methods to class methods.
     $obj->get_field("NAME", [$INDEX])
     $obj->set_field("NAME", [$INDEX, ] $PARAM)
     $obj->get_property("NAME", [$INDEX])
-    $obj->set_property("PROPNAME", [$INDEX, ] $PARAM)
+    $obj->set_property("NAME", [$INDEX, ] $PARAM)
     $obj->get_value("NAME", [$INDEX])
     $obj->set_value("NAME", [$INDEX, ] $PARAM)
     $obj->add_event("NAME", $DELEG)
@@ -687,6 +671,7 @@ Win32::CLR automatically converts primitive value between .net and perl.
         Byte, UInt16, UInt32, UInt64 -> perl unsigned int
         Single, Double               -> perl double
         Char, String, Decimal        -> perl string(utf8 flag on)
+        null(nullptr)                -> perl undef
         other                        -> perl Win32::CLR instance
 
     perl -> .net
@@ -695,10 +680,11 @@ Win32::CLR automatically converts primitive value between .net and perl.
         perl unsigned int   -> UInt32 -> cast target
         perl string         -> Char, String, Decimal
         perl double         -> Double -> cast target
+        perl undef          -> null(nullptr)
 
 =head1 OVERLOAD
 
-Following operator are overloaded.
+Following operators are overloaded.
 
     "" bool == != + - * / % > >= < <= ++ --
 

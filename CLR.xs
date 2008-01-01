@@ -44,6 +44,7 @@ namespace XS {
             SV* get() { return reinterpret_cast<SV*>( this->_Pointer.ToInt32() ); }
         }
 
+        virtual String^ ToString() override;
         Object^ ChangeType(Type^ type_to);
 
     };
@@ -59,6 +60,10 @@ namespace XS {
         this->!SvPointer();
     }
 
+    String^ SvPointer::ToString() {
+        return SvToString(this->Pointer);
+    }
+
     Object^ SvPointer::ChangeType(Type^ type_to) {
 
         TypeCode code_to = Type::GetTypeCode(type_to);
@@ -68,31 +73,22 @@ namespace XS {
             case TypeCode::Boolean:
                 return Convert::ToBoolean( SvTRUE(sv) );
             case TypeCode::SByte:
-                return Convert::ToSByte( safe_cast<Int32>( SvIV(sv) ) );
             case TypeCode::Int16:
-                return Convert::ToInt16( safe_cast<Int32>( SvIV(sv) ) );
             case TypeCode::Int32:
-                return Convert::ToInt32( safe_cast<Int32>( SvIV(sv) ) );
             case TypeCode::Int64:
-                return Convert::ToInt64( safe_cast<Int32>( SvIV(sv) ) );
+                return Convert::ChangeType( safe_cast<Int32>( SvIV(sv) ), code_to );
             case TypeCode::Byte:
-                return Convert::ToByte( safe_cast<UInt32>( SvUV(sv) ) );
             case TypeCode::UInt16:
-                return Convert::ToUInt16( safe_cast<UInt32>( SvUV(sv) ) );
             case TypeCode::UInt32:
-                return Convert::ToUInt32( safe_cast<UInt32>( SvUV(sv) ) );
             case TypeCode::UInt64:
-                return Convert::ToUInt64( safe_cast<UInt32>( SvUV(sv) ) );
+                return Convert::ChangeType( safe_cast<UInt32>( SvUV(sv) ), code_to );
             case TypeCode::Single:
-                return Convert::ToSingle( safe_cast<Double>( SvNV(sv) ) );
             case TypeCode::Double:
-                return Convert::ToDouble( safe_cast<Double>( SvNV(sv) ) );
+                return Convert::ChangeType( safe_cast<Double>( SvNV(sv) ), code_to );
             case TypeCode::Decimal:
-                return Convert::ToDecimal( SvToString(sv) );
             case TypeCode::Char:
-                return Convert::ToChar( SvToString(sv) );
             case TypeCode::String:
-                return SvToString(sv);
+                return Convert::ChangeType( SvToString(sv), code_to );
             default:
                 return nullptr;
         }
@@ -108,8 +104,10 @@ namespace XS {
     private:
 
        ref class StateHolder {
+
        public:
           array<Object^>^ Arguments;
+
        };
 
     public:
@@ -125,16 +123,23 @@ namespace XS {
                 throw gcnew ArgumentNullException("match");
             }
 
-            Type^ type_from = value->GetType();
             Reflection::FieldInfo^ matched = nullptr;
 
             for each(Reflection::FieldInfo^ field in match) {
+
+                if (nullptr == value) {
+                    matched = field;
+                    break;
+                }
+
+                Type^ type_from = value->GetType();
 
                 if (type_from == field->FieldType) { /* check exact match */
                     matched = field;
                     break;
                 }
-                else if ( Convertible(type_from, field->FieldType) ) {
+
+                if ( Convertible(type_from, field->FieldType) ) {
                     matched = field;
                 }
 
@@ -190,6 +195,12 @@ namespace XS {
 
                     }
 
+                    if (nullptr == arguments[i]) {
+                        exact++;
+                        count++;
+                        continue;
+                    }
+
                     if ( arguments[i]->GetType() == parameters[i]->ParameterType ) {
                         exact++;
                     }
@@ -207,7 +218,8 @@ namespace XS {
                     matched = method;
                     break;
                 }
-                else if (count == arguments->Length) {
+
+                if (count == arguments->Length) {
                     matched = method;
                 }
 
@@ -218,25 +230,31 @@ namespace XS {
 
         virtual Object^ ChangeType(Object^ value, Type^ type_to, Globalization::CultureInfo^ culture) override {
 
+            if (nullptr == value) {
+                return value;
+            }
+
             Type^ type_from = value->GetType();
 
-            if ( Convertible(type_from, type_to) ) {
+            if (type_from == type_to) {
+                return value;
+            }
 
-                if (type_from == type_to) {
-                    return value;
-                }
+            if ( Convertible(type_from, type_to) ) {
 
                 if (SvPointer::typeid == type_from) {
                     return safe_cast<SvPointer^>(value)->ChangeType(type_to);
                 }
 
+                if (Object::typeid == type_to) {
+                    return value;
+                }
+
                 return Convert::ChangeType(value, type_to, culture);
 
             }
-            else {
-                return nullptr;
-            }
 
+            return nullptr;
         }
 
         virtual void ReorderArgumentArray(array<Object^>^% arguments, Object^ state_holder) override {
@@ -286,7 +304,8 @@ namespace XS {
                     matched = method;
                     break;
                 }
-                else if (count == types->Length) {
+
+                if (count == types->Length) {
                     matched = method;
                 }
 
@@ -339,7 +358,8 @@ namespace XS {
                     matched = prop;
                     break;
                 }
-                else if ( count == indexes->Length && Convertible(return_type, prop->PropertyType) ) {
+
+                if ( count == indexes->Length && Convertible(return_type, prop->PropertyType) ) {
                     matched = prop;
                 }
 
@@ -690,7 +710,7 @@ namespace XS {
 
     public:
 
-        Code(SV* code);
+        Code(SV* code, Type^ type);
 
         property SV* Pointer {
             SV* get() { return reinterpret_cast<SV*>( this->_Pointer.ToInt32() ); }
@@ -760,8 +780,14 @@ namespace XS {
             return gch.Target;
         }
 
-        if ( SvROK(sv) && SvTYPE( SvRV(sv) ) == SVt_PVAV ) return SvToArray(sv);
-        if (&PL_sv_undef == sv) return nullptr;
+        if ( SvROK(sv) && SvTYPE( SvRV(sv) ) == SVt_PVAV ) {
+            return SvToArray(sv);
+        }
+
+        if (&PL_sv_undef == sv) {
+            return nullptr;
+        }
+
         return gcnew SvPointer(sv);
     }
 
@@ -818,11 +844,10 @@ namespace XS {
 
     }
 
-    Type^ GetType(String^ name) {
-        Type^ type;
-        type = Type::GetType(name);
+    Type^ GetType(String^ tname) {
+        Type^ type = Type::GetType(tname);
         if (nullptr == type) {
-            type = Assembly::GetType(name);
+            type = Assembly::GetType(tname);
         }
         return type;
     }
@@ -876,8 +901,9 @@ namespace XS {
         return nullptr;
     }
 
-    Code::Code(SV* code) {
-        this->_Pointer = static_cast<IntPtr>( newSVsv(code) );
+    Code::Code(SV* code, Type^ type) {
+        this->_Pointer   = static_cast<IntPtr>( newSVsv(code) );
+        this->ReturnType = type;
     }
 
     Code::!Code() {}
@@ -908,7 +934,7 @@ namespace XS {
 
         SPAGAIN;
 
-        if (0 < count && Void::typeid != this->ReturnType) {
+        if ( 0 < count && Void::typeid != this->ReturnType ) {
 
             retval = SvGetInstance(POPs);
 
@@ -941,7 +967,6 @@ namespace XS {
         Reflection::Emit::LocalBuilder^     deleg_param;
 
         method_info = deleg_type->GetMethod("Invoke");
-        this->ReturnType = method_info->ReturnType;
         param_info  = method_info->GetParameters();
 
         param_types    = gcnew array<Type^>(param_info->Length + 1);
@@ -959,7 +984,7 @@ namespace XS {
         );
 
         dyn_method_il = dyn_method->GetILGenerator(256);
-        deleg_param = dyn_method_il->DeclareLocal( Type::GetType("System.Object[]") );
+        deleg_param   = dyn_method_il->DeclareLocal( Type::GetType("System.Object[]") );
 
         dyn_method_il->Emit(Reflection::Emit::OpCodes::Ldc_I4, param_types->Length);
         dyn_method_il->Emit(Reflection::Emit::OpCodes::Newarr, Object::typeid);
@@ -977,7 +1002,7 @@ namespace XS {
 
         dyn_method_il->Emit( Reflection::Emit::OpCodes::Call, Code::typeid->GetMethod("Call") );
 
-        if ( method_info->ReturnType->Equals(Void::typeid) ) {
+        if (method_info->ReturnType == Void::typeid) {
             dyn_method_il->Emit(Reflection::Emit::OpCodes::Pop);
         }
         else {
@@ -1030,27 +1055,22 @@ OUTPUT:
     RETVAL
 
 CLR_Object
-_call_generic_method(Win32_CLR self, CLR_String tname, CLR_String name, AV* generic_param_names, CLR_Param4 params = nullptr, ...)
+_call_generic_method(Win32_CLR self, CLR_String tname, CLR_String name, AV* generic_tnames, CLR_Param4 params = nullptr, ...)
 PREINIT:
-    Reflection::MethodInfo^ method_info;
+    Reflection::MethodInfo^ info;
     Reflection::BindingFlags flags;
 CODE:
     Type^ type = XS::GetType(tname);
     String^ call_type = nullptr == self ? "Static" : "Instance";
     flags = XS::GetBindingFlags("Public, FlattenHierarchy, InvokeMethod, OptionalParamBinding, " + call_type);
-
-    int length = av_len(generic_param_names) + 1;
+    int length = av_len(generic_tnames) + 1;
     array<Type^>^ generic_types = gcnew array<Type^>(length);
-
     for (int i = 0; i < length; i++) {
-        SV** generic_tname = av_fetch(generic_param_names, i, FALSE);
+        SV** generic_tname = av_fetch(generic_tnames, i, FALSE);
         generic_types[i] = XS::GetType( XS::SvToString(*generic_tname) );
     }
-
-    method_info = type->GetMethod(name, flags);
-    method_info = method_info->GetGenericMethodDefinition();
-    method_info = method_info->MakeGenericMethod(generic_types);
-    RETVAL = method_info->Invoke(self, flags, gcnew XS::Binder(), params, nullptr);
+    info   = type->GetMethod(name, flags)->GetGenericMethodDefinition()->MakeGenericMethod(generic_types);
+    RETVAL = info->Invoke(self, flags, gcnew XS::Binder(), params, nullptr);
 OUTPUT:
     RETVAL
 
@@ -1091,12 +1111,12 @@ CODE:
     XS::InvokeMember(self, tname, name, "SetProperty, SetField", params);
 
 bool
-_derived_from(CLR_Object self, CLR_String name)
+_derived_from(Win32_CLR self, CLR_String tname)
 CODE:
     bool found = false;
-    Type^ find_type = XS::GetType(name);
+    Type^ find_type = XS::GetType(tname);
     for (Type^ type = self->GetType(); type != nullptr; type = type->BaseType) {
-        if ( type == XS::GetType(name) ) {
+        if (type == find_type) {
             found = true;
             break;
         }
@@ -1121,11 +1141,11 @@ OUTPUT:
 
 CLR_Object
 _create_delegate(SV* package, CLR_String tname, SV* sv)
-PREINIT:
-    XS::Code^ code;
 CODE:
-    code = gcnew XS::Code(sv);
-    RETVAL = code->CreateDelegate( XS::GetType(tname) );
+    Type^ deleg_type = XS::GetType(tname);
+    Type^ return_type = deleg_type->GetMethod("Invoke")->ReturnType;
+    XS::Code^ code = gcnew XS::Code(sv, return_type);
+    RETVAL = code->CreateDelegate(deleg_type);
 OUTPUT:
     RETVAL
 
@@ -1137,8 +1157,10 @@ CODE:
     Type^ type = XS::GetType(tname);
     Reflection::EventInfo^ info = type->GetEvent(name);
     if ( XS::SvPointer::typeid == handler->GetType() ) {
-        XS::Code^ code = gcnew XS::Code( safe_cast<XS::SvPointer^>(handler)->Pointer );
-        deleg = code->CreateDelegate(info->EventHandlerType);
+        Type^ deleg_type = info->EventHandlerType;
+        Type^ return_type = deleg_type->GetMethod("Invoke")->ReturnType;
+        XS::Code^ code = gcnew XS::Code( safe_cast<XS::SvPointer^>(handler)->Pointer, return_type );
+        deleg = code->CreateDelegate(deleg_type);
     }
     else {
         deleg = safe_cast<Delegate^>(handler);
@@ -1212,7 +1234,7 @@ OUTPUT:
 int
 get_addr(SV* self)
 CODE:
-    RETVAL = static_cast<int>( SvIV( reinterpret_cast<SV*>( SvRV(self) ) ) );
+    RETVAL = safe_cast<int>( SvIV( reinterpret_cast<SV*>( SvRV(self) ) ) );
 OUTPUT:
     RETVAL
 
@@ -1251,7 +1273,7 @@ OUTPUT:
 bool
 op_boolify(Win32_CLR self, ...)
 CODE:
-    // RETVAL = Convert::ToBoolean(self);
+    /* RETVAL = Convert::ToBoolean(self); */
     RETVAL = true;
 OUTPUT:
     RETVAL

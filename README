@@ -1,4 +1,4 @@
-Win32::CLR version 0.01
+Win32::CLR version 0.02
 
 Win32::CLR provides utility methods to using Microsoft .NET Framework,
 also known as Common Language Runtime. It is available for creating object,
@@ -7,7 +7,7 @@ to delegate, loading assembly.
 
 PREREQUISITES
 
-This module requires C++/CLI compiler, C++/CLI is supported on VC 2005 or later.
+This module requires C++/CLI compiler, C++/CLI is supported on VC++ 2005 or later.
 
     Microsoft Visual C++ 2005 with Platform SDK or 2008
     perl 5.9.5 or later compiled with Visual C++ 2005 or 2008
@@ -17,7 +17,7 @@ INSTALL
 
 To install this module, run the following commands:
 
-    vcvars32 # setup VC environment variables
+    vcvars32 # setup VC++ environment variables
     perl Makefile.PL
     nmake
     nmake test

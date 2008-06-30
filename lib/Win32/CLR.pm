@@ -4,7 +4,7 @@ use strict;
 use Carp;
 
 BEGIN {
-    our $VERSION = "0.02";
+    our $VERSION = "0.03";
     require XSLoader;
     XSLoader::load(__PACKAGE__, $VERSION);
 
@@ -588,6 +588,14 @@ delimited by commas. Default is Method, Field, Property, Event.
         print "System.String has Length\n";
     }
 
+=item Win32::CLR->get_type_name($OBJ)
+
+Returns type name in CLR.
+
+=item Win32::CLR->get_qualified_type($OBJ)
+
+Returns full qualified type name in CLR.
+
 =back
 
 =head1 INSTANCE METHODS
@@ -604,6 +612,8 @@ Win32::CLR instance has similar methods to class methods.
     $obj->add_event("NAME", $DELEG)
     $obj->remove_event("NAME", $DELEG)
     $obj->has_member("NAME", [$MEMBER_TYPE])
+    $obj->get_type_name()
+    $obj->get_qualified_type()
 
 =over
 
@@ -682,6 +692,24 @@ Win32::CLR automatically converts primitive value between .net and perl.
         perl double         -> Double -> cast target
         perl undef          -> null(nullptr)
 
+=head1 EXCEPTION HANDLING
+
+When error occurred, System.Exception object is setted in $@. If you want to
+catch the exception, use eval-block statement. Note that exception message is
+utf8 encoded.
+
+    use Win32::CLR;
+
+    binmode STDERR, ":encoding(sjis)"; # if japanese windows
+
+    eval {
+        # Invalid arguments!
+        my $dt1 = Win32::CLR->create_instance("System.DateTime", 2007, 8, 9, 10);
+    };
+
+    print STDERR $@->get_property("Message"), "\n";
+    print STDERR $@->get_type_name(), "\n"; # System.MissingMethodException
+
 =head1 OVERLOAD
 
 Following operators are overloaded.
@@ -718,7 +746,7 @@ More tests and documents are required.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2007 Toshiyuki Yamato, all rights reserved.
+Copyright (C) 2008 Toshiyuki Yamato, all rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

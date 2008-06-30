@@ -1,7 +1,7 @@
 #!perl -w
 
 use strict;
-use Test::More tests => 46;
+use Test::More tests => 48;
 use utf8;
 
 # binmode STDOUT, ":encoding(Shift_JIS)"; # japanese windows codepage
@@ -86,3 +86,10 @@ isa_ok($array, "Win32::CLR");
 is( $array->call_method("GetValue", 0), "A" );
 is( $array->call_method("GetValue", 1), "B" );
 is( $array->call_method("GetValue", 2), "C" );
+
+eval {
+    my $dt1 = Win32::CLR->create_instance("System.DateTime", 2007, 8, 9, 10);
+};
+
+ok($@);
+is( $@->get_type_name(), "System.MissingMethodException" );

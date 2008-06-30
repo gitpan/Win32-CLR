@@ -1,4 +1,4 @@
-Win32::CLR version 0.02
+Win32::CLR version 0.03
 
 Win32::CLR provides utility methods to using Microsoft .NET Framework,
 also known as Common Language Runtime. It is available for creating object,
@@ -25,7 +25,7 @@ To install this module, run the following commands:
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2007 Toshiyuki Yamato <toshiyuki.yamato@gmail.com>
+Copyright (C) 2008 Toshiyuki Yamato <toshiyuki.yamato@gmail.com>
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

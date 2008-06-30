@@ -740,7 +740,10 @@ namespace XS {
     }
 
     String^ SvToString(SV* sv) {
-        if ( SvUTF8(sv) ) {
+        if ( !SvOK(sv) ) {
+            return nullptr;
+        }
+        else if ( SvUTF8(sv) ) {
             Text::UTF8Encoding^ utf8_enc = gcnew Text::UTF8Encoding();
             return gcnew String( SvPV_nolen(sv), 0, SvCUR(sv), utf8_enc );
         }
@@ -772,6 +775,10 @@ namespace XS {
 
     Object^ SvGetInstance(SV* sv) {
 
+        if ( !SvOK(sv) ) {
+            return nullptr;
+        }
+
         if ( sv_isobject(sv) && sv_derived_from(sv, "Win32::CLR") ) {
             Runtime::InteropServices::GCHandle gch;
             int addr = SvIV( reinterpret_cast<SV*>( SvRV(sv) ) );
@@ -784,9 +791,11 @@ namespace XS {
             return SvToArray(sv);
         }
 
+        /*
         if (&PL_sv_undef == sv) {
             return nullptr;
         }
+        */
 
         return gcnew SvPointer(sv);
     }
@@ -1035,7 +1044,15 @@ MODULE = Win32::CLR    PACKAGE = Win32::CLR
 CLR_Object
 _create_instance(Win32_CLR self, CLR_String tname, CLR_Param2 params = nullptr, ...)
 CODE:
-    RETVAL = XS::InvokeMember(self, tname, "", "CreateInstance, Instance", params);
+    try {
+        RETVAL = XS::InvokeMember(self, tname, "", "CreateInstance, Instance", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
@@ -1050,7 +1067,15 @@ CODE:
 CLR_Object
 _call_method(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Param3 params = nullptr, ...)
 CODE:
-    RETVAL = XS::InvokeMember(self, tname, name, "InvokeMethod, OptionalParamBinding", params);
+    try {
+        RETVAL = XS::InvokeMember(self, tname, name, "InvokeMethod, OptionalParamBinding", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
@@ -1060,55 +1085,111 @@ PREINIT:
     Reflection::MethodInfo^ info;
     Reflection::BindingFlags flags;
 CODE:
-    Type^ type = XS::GetType(tname);
-    String^ call_type = nullptr == self ? "Static" : "Instance";
-    flags = XS::GetBindingFlags("Public, FlattenHierarchy, InvokeMethod, OptionalParamBinding, " + call_type);
-    int length = av_len(generic_tnames) + 1;
-    array<Type^>^ generic_types = gcnew array<Type^>(length);
-    for (int i = 0; i < length; i++) {
-        SV** generic_tname = av_fetch(generic_tnames, i, FALSE);
-        generic_types[i] = XS::GetType( XS::SvToString(*generic_tname) );
+    try {
+        Type^ type = XS::GetType(tname);
+        String^ call_type = nullptr == self ? "Static" : "Instance";
+        flags = XS::GetBindingFlags("Public, FlattenHierarchy, InvokeMethod, OptionalParamBinding, " + call_type);
+        int length = av_len(generic_tnames) + 1;
+        array<Type^>^ generic_types = gcnew array<Type^>(length);
+        for (int i = 0; i < length; i++) {
+            SV** generic_tname = av_fetch(generic_tnames, i, FALSE);
+            generic_types[i] = XS::GetType( XS::SvToString(*generic_tname) );
+        }
+        info   = type->GetMethod(name, flags)->GetGenericMethodDefinition()->MakeGenericMethod(generic_types);
+        RETVAL = info->Invoke(self, flags, gcnew XS::Binder(), params, nullptr);
     }
-    info   = type->GetMethod(name, flags)->GetGenericMethodDefinition()->MakeGenericMethod(generic_types);
-    RETVAL = info->Invoke(self, flags, gcnew XS::Binder(), params, nullptr);
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
 CLR_Object
 _get_field(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Param3 params = nullptr, ...)
 CODE:
-    RETVAL = XS::InvokeMember(self, tname, name, "GetField", params);
+    try {
+        RETVAL = XS::InvokeMember(self, tname, name, "GetField", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
 void
 _set_field(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Param3 params = nullptr, ...)
 CODE:
-    XS::InvokeMember(self, tname, name, "SetField", params);
+    try {
+        XS::InvokeMember(self, tname, name, "SetField", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 
 CLR_Object
 _get_property(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Param3 params = nullptr, ...)
 CODE:
-    RETVAL = XS::InvokeMember(self, tname, name, "GetProperty", params);
+    try {
+        RETVAL = XS::InvokeMember(self, tname, name, "GetProperty", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
 void
 _set_property(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Param3 params = nullptr, ...)
 CODE:
-    XS::InvokeMember(self, tname, name, "SetProperty", params);
+    try {
+        XS::InvokeMember(self, tname, name, "SetProperty", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 
 CLR_Object
 _get_value(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Param3 params = nullptr, ...)
 CODE:
-    RETVAL = XS::InvokeMember(self, tname, name, "GetProperty, GetField", params);
+    try {
+        RETVAL = XS::InvokeMember(self, tname, name, "GetProperty, GetField", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
 void
 _set_value(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Param3 params = nullptr, ...)
 CODE:
-    XS::InvokeMember(self, tname, name, "SetProperty, SetField", params);
+    try {
+        XS::InvokeMember(self, tname, name, "SetProperty, SetField", params);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 
 bool
 _derived_from(Win32_CLR self, CLR_String tname)
@@ -1128,24 +1209,48 @@ OUTPUT:
 CLR_Object
 load(SV* package, CLR_String name)
 CODE:
-    RETVAL = XS::Assembly::Load(name);
+    try {
+        RETVAL = XS::Assembly::Load(name);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
 CLR_Object
 load_from(SV* package, CLR_String filename)
 CODE:
-    RETVAL = XS::Assembly::LoadFrom(filename);
+    try {
+        RETVAL = XS::Assembly::LoadFrom(filename);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
 CLR_Object
 _create_delegate(SV* package, CLR_String tname, SV* sv)
 CODE:
-    Type^ deleg_type = XS::GetType(tname);
-    Type^ return_type = deleg_type->GetMethod("Invoke")->ReturnType;
-    XS::Code^ code = gcnew XS::Code(sv, return_type);
-    RETVAL = code->CreateDelegate(deleg_type);
+    try {
+        Type^ deleg_type = XS::GetType(tname);
+        Type^ return_type = deleg_type->GetMethod("Invoke")->ReturnType;
+        XS::Code^ code = gcnew XS::Code(sv, return_type);
+        RETVAL = code->CreateDelegate(deleg_type);
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
@@ -1154,41 +1259,65 @@ _add_event(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Object handler
 PREINIT:
     Delegate^ deleg;
 CODE:
-    Type^ type = XS::GetType(tname);
-    Reflection::EventInfo^ info = type->GetEvent(name);
-    if ( XS::SvPointer::typeid == handler->GetType() ) {
-        Type^ deleg_type = info->EventHandlerType;
-        Type^ return_type = deleg_type->GetMethod("Invoke")->ReturnType;
-        XS::Code^ code = gcnew XS::Code( safe_cast<XS::SvPointer^>(handler)->Pointer, return_type );
-        deleg = code->CreateDelegate(deleg_type);
+    try {
+        Type^ type = XS::GetType(tname);
+        Reflection::EventInfo^ info = type->GetEvent(name);
+        if ( XS::SvPointer::typeid == handler->GetType() ) {
+            Type^ deleg_type = info->EventHandlerType;
+            Type^ return_type = deleg_type->GetMethod("Invoke")->ReturnType;
+            XS::Code^ code = gcnew XS::Code( safe_cast<XS::SvPointer^>(handler)->Pointer, return_type );
+            deleg = code->CreateDelegate(deleg_type);
+        }
+        else {
+            deleg = safe_cast<Delegate^>(handler);
+        }
+        info->AddEventHandler(self, deleg);
     }
-    else {
-        deleg = safe_cast<Delegate^>(handler);
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
     }
-    info->AddEventHandler(self, deleg);
 
 void
 _remove_event(Win32_CLR self, CLR_String tname, CLR_String name, CLR_Object handler)
-CODE:
-    Type^ type = XS::GetType(tname);
-    Reflection::EventInfo^ info = type->GetEvent(name);
-    info->RemoveEventHandler(self, safe_cast<Delegate^>(handler) );
+CODE: 
+    try {
+        Type^ type = XS::GetType(tname);
+        Reflection::EventInfo^ info = type->GetEvent(name);
+        info->RemoveEventHandler(self, safe_cast<Delegate^>(handler) );
+    }
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 
 CLR_Object
 _create_array(Win32_CLR self, CLR_String tname, ...)
 CODE:
-    Type^ type = XS::GetType(tname);
-    Array^ arr = Array::CreateInstance(type, items - 2);
-    for (int i = 0; i < arr->Length; i++) {
-        Object^ value = XS::SvGetInstance( ST(i + 2) );
-        if (nullptr != value) {
-            if ( XS::SvPointer::typeid == value->GetType() ) {
-                value = safe_cast<XS::SvPointer^>(value)->ChangeType(type);
+    try {
+        Type^ type = XS::GetType(tname);
+        Array^ arr = Array::CreateInstance(type, items - 2);
+        for (int i = 0; i < arr->Length; i++) {
+            Object^ value = XS::SvGetInstance( ST(i + 2) );
+            if (nullptr != value) {
+                if ( XS::SvPointer::typeid == value->GetType() ) {
+                    value = safe_cast<XS::SvPointer^>(value)->ChangeType(type);
+                }
             }
+            arr->SetValue(value, i);
         }
-        arr->SetValue(value, i);
+        RETVAL = arr;
     }
-    RETVAL = arr;
+    catch (Exception^ ex) {
+        SV* err;
+        err = get_sv("@", TRUE);
+        XS::SvSetInstance(err, ex);
+        croak(NULL);
+    }
 OUTPUT:
     RETVAL
 
